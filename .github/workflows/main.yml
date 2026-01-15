@@ -2,9 +2,7 @@ name: Instagram Auto Publisher
 
 on:
   schedule:
-    # سيقوم بالعمل 3 مرات يومياً (كل 8 ساعات)
     - cron: '0 */8 * * *'
-  # يسمح لك بتشغيله يدوياً للتجربة
   workflow_dispatch:
 
 jobs:
@@ -17,7 +15,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11
+          python-version: '3.11'
 
       - name: Install Libraries
         run: |

@@ -1,0 +1,32 @@
+name: Instagram Auto Publisher
+
+on:
+  schedule:
+    # سيقوم بالعمل 3 مرات يومياً (كل 8 ساعات)
+    - cron: '0 */8 * * *'
+  # يسمح لك بتشغيله يدوياً للتجربة
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Libraries
+        run: |
+          pip install requests Pillow instagrapi gspread google-auth oauth2client
+
+      - name: Run Script
+        env:
+          IG_USERNAME: ${{ secrets.IG_USERNAME }}
+          IG_PASSWORD: ${{ secrets.IG_PASSWORD }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: python main.py

@@ -6,7 +6,7 @@ import time
 from PIL import Image
 from instagrapi import Client
 from google.oauth2.service_account import Credentials
-from huggingface_hub import InferenceClient
+import requests
 
 # 1. جلب البيانات السرية
 hf_token = os.getenv('HF_TOKEN')
@@ -17,27 +17,31 @@ gcp_key_json = json.loads(os.getenv('GCP_SA_KEY'))
 # 2. معرف ملف جوجل شيت
 SHEET_ID = '1o-qImlB8GNLrAL1Kb7y5e1PPUERMFya5M6QZ3JjhEos'
 
-# 3. إعداد العميل الرسمي
-# استخدمنا sdxl-turbo لأنه أسرع بـ 10 مرات ومستقر جداً
-client_hf = InferenceClient(token=hf_token)
-MODEL_ID = "stabilityai/sdxl-turbo"
+# 3. استخدام موديل OpenJourney (مستقر جداً ومجاني)
+# سنستخدم طلب الـ HTTP المباشر بدلاً من المكتبة لنرى الخطأ بوضوح
+MODEL_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
+headers = {"Authorization": f"Bearer {hf_token}"}
 
 def generate_image(prompt):
     clean_prompt = prompt.replace('|', ',').strip()
-    # إضافة لمسة فنية للبرومبت لضمان جودة عالية
-    enhanced_prompt = f"{clean_prompt}, high quality, 4k, cinematic"
+    print(f"🎨 جاري طلب صورة لـ: {clean_prompt}")
     
-    print(f"🎨 جاري طلب صورة لـ: {enhanced_prompt}")
+    payload = {"inputs": clean_prompt, "options": {"wait_for_model": True}}
+    
     try:
-        # طلب الصورة مع تفعيل خاصية الانتظار إذا كان الموديل في وضع التحميل
-        image = client_hf.text_to_image(enhanced_prompt, model=MODEL_ID)
+        response = requests.post(MODEL_URL, headers=headers, json=payload, timeout=90)
         
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='JPEG')
-        return img_byte_arr.getvalue()
+        if response.status_code == 200:
+            return response.content
+        elif response.status_code == 503:
+            print("⏳ الموديل يتم تحميله الآن (Cold Start)، سننتظر 20 ثانية...")
+            time.sleep(20)
+            return generate_image(prompt) # إعادة المحاولة
+        else:
+            print(f"❌ خطأ من Hugging Face (Status {response.status_code}): {response.text}")
+            return None
     except Exception as e:
-        # طباعة الخطأ بالتفصيل الممل
-        print(f"❌ خطأ تقني في Hugging Face: {str(e)}")
+        print(f"❌ خطأ تقني في الاتصال: {str(e)}")
         return None
 
 # 4. الاتصال بجوجل شيت
@@ -60,9 +64,13 @@ for i, row in enumerate(rows):
     
     if status_value == "" or status_value == "none":
         found_item = True
+        # التأكد من وجود برومبت
+        prompt = str(row.get('Prompt', '')).strip()
+        if not prompt:
+            continue
+            
         print(f"🔄 جاري معالجة السطر رقم {i+2}...")
-        
-        img_data = generate_image(row['Prompt'])
+        img_data = generate_image(prompt)
         
         if img_data:
             try:
@@ -71,7 +79,6 @@ for i, row in enumerate(rows):
                 
                 print("📲 جاري تسجيل الدخول لإنستقرام...")
                 cl = Client()
-                # ضبط مهلة زمنية أطول لتسجيل الدخول
                 cl.login(ig_username, ig_password)
                 
                 print("📤 جاري رفع المنشور...")
@@ -82,10 +89,10 @@ for i, row in enumerate(rows):
                 break 
                 
             except Exception as e:
-                print(f"❌ خطأ أثناء النشر على إنستقرام: {str(e)}")
+                print(f"❌ خطأ أثناء النشر: {str(e)}")
                 break
         else:
-            print("🛑 فشل توليد الصورة، سيتم المحاولة في الدورة القادمة.")
+            print("🛑 فشل توليد الصورة.")
             break
 
 if not found_item:

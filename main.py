@@ -3,25 +3,26 @@ import json
 import requests
 import io
 import gspread
+import time
 from PIL import Image
 from instagrapi import Client
 from google.oauth2.service_account import Credentials
 
-# 1. جلب البيانات من الخزنة (Secrets)
+# 1. جلب البيانات السرية من GitHub Secrets
 hf_token = os.getenv('HF_TOKEN')
 ig_username = os.getenv('IG_USERNAME')
 ig_password = os.getenv('IG_PASSWORD')
 gcp_key_json = json.loads(os.getenv('GCP_SA_KEY'))
 
-# ⚠️ هام جداً: استبدل الاسم بين القوسين باسم ملف الشيت الخاص بك بالضبط
-SHEET_NAME = 'ضع_اسم_ملف_الشيت_هنا' 
+# 2. معرف ملف جوجل شيت الخاص بك (تم استخراجه من الرابط)
+SHEET_ID = '1o-qImlB8GNLrAL1Kb7y5e1PPUERMFya5M6QZ3JjhEos'
 
-# 2. الموديل المجاني والمستقر (Stable Diffusion)
+# 3. إعدادات موديل الصور (Stable Diffusion v1.5 - الأكثر استقراراً للمجاني)
 API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
 headers = {"Authorization": f"Bearer {hf_token}"}
 
 def generate_image(prompt):
-    # تنظيف النص من العلامات الزائدة
+    # تنظيف البرومبت من أي علامات تعيق الموديل
     clean_prompt = prompt.replace('|', ',').strip()
     print(f"🎨 جاري طلب صورة لـ: {clean_prompt}")
     
@@ -30,55 +31,66 @@ def generate_image(prompt):
         if response.status_code == 200:
             return response.content
         else:
-            print(f"❌ فشل Hugging Face: {response.status_code} - {response.text}")
+            print(f"❌ خطأ في توليد الصورة: {response.status_code} - {response.text}")
             return None
     except Exception as e:
-        print(f"❌ خطأ أثناء الاتصال بـ Hugging Face: {e}")
+        print(f"❌ حدث خطأ أثناء الاتصال بـ Hugging Face: {e}")
         return None
 
-# 3. الاتصال بجوجل شيت
+# 4. الاتصال بجوجل شيت باستخدام الـ ID
 try:
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(gcp_key_json, scopes=scopes)
     gc = gspread.authorize(creds)
-    sh = gc.open(SHEET_NAME).sheet1
-    print("✅ تم الاتصال بـ Google Sheets")
+    # الفتح عن طريق الـ ID يضمن عدم حدوث أخطاء في الأسماء
+    sh = gc.open_by_key(SHEET_ID).sheet1
+    print("✅ تم الاتصال بـ Google Sheets بنجاح")
 except Exception as e:
-    print(f"❌ خطأ في الاتصال بجوجل شيت (تأكد من اسم الملف والمشاركة): {e}")
+    print(f"❌ فشل الاتصال: تأكد من مشاركة الملف مع إيميل البوت ووضع الـ ID الصحيح. الخطأ: {e}")
     exit()
 
-# 4. البحث عن سطر للنشر
+# 5. معالجة البيانات والنشر
 rows = sh.get_all_records()
+found_item = False
+
 for i, row in enumerate(rows):
-    # يبحث عن سطر حيث الـ Status فارغ
-    if not row.get('Status') or str(row.get('Status')).strip() == "":
-        print(f"🔄 جاري معالجة السطر رقم {i+2}...")
+    # يبحث عن أول سطر يكون فيه عمود Status فارغاً
+    status_value = str(row.get('Status', '')).strip().lower()
+    
+    if status_value == "" or status_value == "none":
+        found_item = True
+        print(f"🔄 جاري العمل على السطر رقم {i+2}...")
         
+        # توليد الصورة
         img_data = generate_image(row['Prompt'])
         
         if img_data:
             try:
-                # حفظ الصورة
+                # حفظ الصورة مؤقتاً
                 image = Image.open(io.BytesIO(img_data))
-                image.save("post_image.jpg")
+                image.save("final_post.jpg")
                 
-                # رفع للإنستقرام
-                print("📲 جاري تسجيل الدخول لإنستقرام...")
+                # تسجيل الدخول والنشر
+                print("📲 جاري الدخول لإنستقرام...")
                 cl = Client()
                 cl.login(ig_username, ig_password)
                 
-                print("📤 جاري رفع الصورة...")
-                cl.photo_upload("post_image.jpg", caption=row['Caption'])
+                print("📤 جاري رفع المنشور...")
+                cl.photo_upload("final_post.jpg", caption=row['Caption'])
                 
-                # تحديث الشيت
+                # تحديث حالة السطر في الشيت (العمود C)
                 sh.update_cell(i + 2, 3, "Done") 
-                print(f"✅ مبروك! تم النشر بنجاح للسطر {i+2}")
-                break # ينشر واحدة فقط ثم يتوقف
+                print(f"✅ تم النشر بنجاح للسطر {i+2}")
+                break # ينشر واحدة فقط في كل دورة تشغيل
+                
             except Exception as e:
-                print(f"❌ خطأ في النشر على إنستقرام: {e}")
+                print(f"❌ خطأ أثناء النشر: {e}")
                 break
         else:
-            print("🛑 فشل توليد الصورة، يرجى مراجعة صلاحيات التوكن.")
+            print("🛑 توقف السكربت لأن الموديل لم يستجب.")
             break
 
-print("🏁 انتهت المحاولة.")
+if not found_item:
+    print("ℹ️ لا توجد أسطر جديدة للنشر (تأكد أن عمود Status فارغ).")
+
+print("🏁 انتهت العملية.")

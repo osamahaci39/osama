@@ -19,7 +19,7 @@ jobs:
 
       - name: Install Libraries
         run: |
-          pip install requests Pillow instagrapi gspread google-auth oauth2client
+          pip install requests Pillow instagrapi gspread google-auth oauth2client huggingface_hub
 
       - name: Run Script
         env:

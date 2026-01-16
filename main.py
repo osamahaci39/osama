@@ -19,7 +19,7 @@ SHEET_ID = '1o-qImlB8GNLrAL1Kb7y5e1PPUERMFya5M6QZ3JjhEos'
 
 # 3. استخدام موديل OpenJourney (مستقر جداً ومجاني)
 # سنستخدم طلب الـ HTTP المباشر بدلاً من المكتبة لنرى الخطأ بوضوح
-MODEL_URL = "https://api-inference.huggingface.co/models/prompthero/openjourney"
+MODEL_URL = "https://router.huggingface.co/models/prompthero/openjourney"
 headers = {"Authorization": f"Bearer {hf_token}"}
 
 def generate_image(prompt):

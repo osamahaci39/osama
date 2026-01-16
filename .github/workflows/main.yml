@@ -13,18 +13,17 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup Python
-        uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+        uses: actions/setup-python@v4
 
       - name: Install Libraries
         run: |
-          pip install requests Pillow instagrapi gspread google-auth oauth2client huggingface_hub
+          pip install requests Pillow instagrapi gspread google-auth oauth2client
 
       - name: Run Script
         env:
           IG_USERNAME: ${{ secrets.IG_USERNAME }}
           IG_PASSWORD: ${{ secrets.IG_PASSWORD }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: python main.py
